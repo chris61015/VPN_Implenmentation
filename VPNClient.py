@@ -31,7 +31,7 @@ class Tunnel():
             for r in rset:  
                 if r == self.tfd:  
                     data = os.read(self.tfd, MTU)  
-            print("TUN")
+                    print("TUN")
                     pak = IP(dst="52.14.144.250",chksum = 0)/ICMP(type=8, code=86, seq =self.client_seqno, id = 2012, chksum = 0)/data
                     # icmpPkt = ICMP()
                     # icmpPkt.type = 0
@@ -50,7 +50,7 @@ class Tunnel():
     
                 elif r == self.icmpfd: 
                     print("ICMP")
-            buf = self.icmpfd.recv(BUFFER_SIZE)  
+                    buf = self.icmpfd.recv(BUFFER_SIZE)  
                     os.write(self.tfd, buf)  
 
 if __name__ == '__main__':
