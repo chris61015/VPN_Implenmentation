@@ -10,10 +10,12 @@ IFF_TUN = 0x0001
 IFF_NO_PI = 0x1000
 BUFFER_SIZE = 8192  
 
+IPO = "129.170.194.166"
+ID = 2012
 class Tunnel():
     def create(self):  
 
-        self.tfd = os.open("/dev/net/tun", os.O_RDWR)  
+        self.tfd = os.open("/dev/net/tun", os.O_RDWR) 
         ifs = fcntl.ioctl(self.tfd, TUNSETIFF, struct.pack("16sH", "t%d", IFF_TUN))  
         self.tname = ifs[:16].strip("\x00")  
 
@@ -30,10 +32,10 @@ class Tunnel():
             rset = select.select([self.icmpfd, self.tfd], [], [])[0]  
             for r in rset:  
                 if r == self.tfd:
-                    print("TFD")  
+		    print("TFD")  
                     data = os.read(self.tfd, MTU)  
-
-                    pak = IP(dst="73.253.116.251",chksum = 0)/ICMP(type=0, code=87, seq =self.client_seqno, id = 2012, chksum = 0)/data
+		     			
+                    pak = IP(dst="129.170.194.166")/ICMP(type=0, code=87, seq =self.client_seqno,id=ID)/data
                     # icmpPkt = ICMP()
                     # icmpPkt.type = 0
                     # icmpPkt.code = 87
@@ -41,21 +43,30 @@ class Tunnel():
                     # icmpPkt.id = 2012
                     # icmpPkt.data = data
 
-                    del pak[IP].chksum
-                    del pak[ICMP].chksum
-
-                    pak.show2()
+		   # del pak[ICMP].chksum
+                    #del pak[IP].chksum 
+                    
+	            pak.show2()
                     # send(IP(dst="73.253.116.251")/icmpPkt)
                     send(pak)
+		    #self.icmpfd.sendto(str(pak), (IPO, 22))
                     self.client_seqno += 1     
 
                 elif r == self.icmpfd:
-                    print("ICMP") 
+		    print("ICMP") 
                     buf = self.icmpfd.recv(BUFFER_SIZE) 
-                    data=buf[28:] 
-                    os.write(self.tfd, data)
-                    
+		    IPO = socket.inet_ntoa(buf[12:16])
+		    ttype, code, chksum, IDO,seqno = struct.unpack("!BBHHH", buf[20:28])	
+		    print(IPO, IDO)
+		    if IPO != "10.1.2.2":
+                ID = IDO
+                print(ID)
+		    	data=buf[28:] 
+                os.write(self.tfd, data)
+		    
+  	
 if __name__ == '__main__':
     tun = Tunnel()
     tun.create()  
     tun.run()
+
