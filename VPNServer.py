@@ -25,50 +25,53 @@ class Tunnel():
 		os.system("ip link set %s mtu 1000" % (self.tname))    #deletable 
 		os.system("ip addr add %s dev %s" % (ip, self.tname))  
 
-		def run(self):  
-			self.icmpfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("icmp"))  
-			self.client_seqno = 1
-			self.clients = {}
-			while True:  
-				rset = select.select([self.icmpfd, self.tfd], [], [])[0]  
-				for r in rset:  
-					if r == self.tfd:
-						print("TFD")  
-						data = os.read(self.tfd, MTU)
+	def run(self):  
+		self.icmpfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("icmp"))  
+		self.clients = {}
+		while True:  
+			rset = select.select([self.icmpfd, self.tfd], [], [])[0]  
+			for r in rset:  
+				if r == self.tfd:
+					print("TFD")  
+					data = os.read(self.tfd, MTU)
 
-						IPO = socket.inet_ntoa(data[12:16])
-						destination = self.clients[IPO]
+					vip = socket.inet_ntoa(data[16:20])
+					destination = self.clients[vip]["ip"]
+					print(vip, destination)
 
-						pak = IP(dst=destination)/ICMP(type=0, code=87, seq =self.client_seqno,id=ID)/data
-						# icmpPkt = ICMP()
-						# icmpPkt.type = 0
-						# icmpPkt.code = 87
-						# icmpPkt.seq = self.client_seqno
-						# icmpPkt.id = 2012
-						# icmpPkt.data = data
+					pak = IP(dst=destination)/ICMP(type=0, code=87, seq =self.clients[vip]["client_seqno"],id=self.clients[vip]["id"])/data
+					# icmpPkt = ICMP()
+					# icmpPkt.type = 0
+					# icmpPkt.code = 87
+					# icmpPkt.seq = self.client_seqno
+					# icmpPkt.id = 2012
+					# icmpPkt.data = data
 
-						# del pak[ICMP].chksum
-						#del pak[IP].chksum 
+					# del pak[ICMP].chksum
+					#del pak[IP].chksum 
 
-						pak.show2()
-						# send(IP(dst="73.253.116.251")/icmpPkt)
-						send(pak)
-						#self.icmpfd.sendto(str(pak), (IPO, 22))
-						self.client_seqno += 1     
+					pak.show2()
+					# send(IP(dst="73.253.116.251")/icmpPkt)
+					send(pak)
+					#self.icmpfd.sendto(str(pak), (IPO, 22))
+					self.clients[vip]["client_seqno"] += 1   
 
-					elif r == self.icmpfd:
-						print("ICMP") 
-						buf = self.icmpfd.recv(BUFFER_SIZE) 
-						IPO = socket.inet_ntoa(buf[12:16])
-						ttype, code, chksum, IDO,seqno = struct.unpack("!BBHHH", buf[20:28])	
-						print(IPO, IDO)
-						if IPO != "10.1.2.2" and IPO != "10.1.2.3":
-							ID = IDO
-							print(ID)
-							data=buf[28:]
-							vip = socket.inet_ntoa(data[12:16])
-							if vip in self.clients:
-								os.write(self.tfd, data)
+				elif r == self.icmpfd:
+					print("ICMP") 
+					buf = self.icmpfd.recv(BUFFER_SIZE) 
+					IPO = socket.inet_ntoa(buf[12:16])
+					ttype, code, chksum, IDO,seqno = struct.unpack("!BBHHH", buf[20:28])	
+					print(IPO, IDO)
+					if IPO != "10.1.2.2" and IPO != "10.1.2.3":
+						ID = IDO
+						print(ID)
+						data=buf[28:]
+						vip = socket.inet_ntoa(data[12:16])
+						print vip
+						if vip not in self.clients.keys():
+							self.clients[vip] = {"ip" : IPO, "client_seqno": 1, "id": ID}
+						else:
+							os.write(self.tfd, data)
 
 
 if __name__ == '__main__':
