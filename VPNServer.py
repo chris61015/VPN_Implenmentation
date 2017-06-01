@@ -26,11 +26,12 @@ class Tunnel():
 		os.system("ip addr add %s dev %s" % (ip, self.tname))  
 
 	def run(self):  
-		self.icmpfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("icmp"))  
+		self.udpfd = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.getprotobyname("udp"))
+		self.udpfd.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, True) 
 		self.clients = {}
-		self.vaddr = []
+		pre_vip = 1
 		while True:  
-			rset = select.select([self.icmpfd, self.tfd], [], [])[0]  
+			rset = select.select([self.udpfd, self.tfd], [], [])[0]  
 			for r in rset:  
 				if r == self.tfd:
 					print("TFD")  
@@ -38,33 +39,38 @@ class Tunnel():
 
 					vip = socket.inet_ntoa(data[20:24])
 					destination = self.clients[vip]["ip"]
-					print "VIP=%s, destination = %s" %(vip, destination)
 
-					pak = IP(dst=destination)/ICMP(type=0, code=87, seq =self.clients[vip]["client_seqno"],id=self.clients[vip]["id"])/data
+					pak = IP(dst=destination)/UDP(dport=self.clients[vip]["sport"], sport=self.clients[vip]["dport"])/data
+					print(vip, self.clients[vip])
 
-				        #del pak[ICMP].chksum
-				        #del pak[IP].chksum 
-
-					pak.show2()
+					# pak.show2()
 					send(pak)
-					self.clients[vip]["client_seqno"] += 1   
 
-				elif r == self.icmpfd:
-					print("ICMP") 
-					buf = self.icmpfd.recv(BUFFER_SIZE) 
+				elif r == self.udpfd:
+					print("UDP")
+					buf = self.udpfd.recv(BUFFER_SIZE) 
 					ip = socket.inet_ntoa(buf[12:16])
 					print("ip:", ip)
+					print("buf len:", buf)
 					data = buf[28:]
 					if not ip.startswith("10.1.2"):	
-						vip = socket.inet_ntoa(data[16:20])
-						print("vip:", vip)
-						if vip not in self.clients.keys():
-							print("IP:%s VIP:%s" % (ip,vip))
-							type, code, chksum, id ,seqno = struct.unpack("!BBHHH", buf[20:28])
-							self.clients[vip] = {"ip" : ip, "client_seqno": seqno, "id": id}
+						pre_vip = socket.inet_ntoa(data[16:20])
+						des_vip = socket.inet_ntoa(data[20:24])
+						print("vip: %s des_ip: %s " % (pre_vip, des_vip))
+						if pre_vip not in self.clients.keys():
+							print("IP:%s VIP:%s" % (ip,pre_vip))
+							sport, dport = struct.unpack("!HH", buf[20:24])
+							self.clients[pre_vip] = {"ip" : ip, "id": id, "sport":sport, "dport":dport}
 
-						os.write(self.tfd, data)
-					
+						if des_vip == "10.1.2.1":
+							os.write(self.tfd, data)
+						elif des_vip in self.clients.keys():
+							destination = self.clients[des_vip]["ip"]
+							pak = IP(dst=destination)/UDP(dport=self.clients[des_vip]["sport"], sport=self.clients[des_vip]["dport"])/data
+							pak.show2()
+							send(pak)
+						else:
+							print("Should not be here!")
 
 if __name__ == '__main__':
 	tun = Tunnel()
